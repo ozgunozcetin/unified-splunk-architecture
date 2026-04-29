@@ -1,5 +1,7 @@
 # Unified Splunk Architecture — Multi-Site Lab
 
+![CI](https://github.com/ozgunozcetin/unified-splunk-architecture/actions/workflows/ci.yml/badge.svg)
+
 A Docker Compose lab that demonstrates the case study **"Unified Splunk
 Architecture for a Multi-Site, Sovereignty-Constrained Organization"**.
 

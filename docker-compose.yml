@@ -176,6 +176,35 @@ services:
           memory: 64M
     restart: unless-stopped
 # -----------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+  # SITE A — Syslog Tier (rsyslog disk-assisted queue + Splunk UF)
+  # Solves the UDP loss problem for network device logs.
+  # rsyslog buffers via disk queue (survives restart);
+  # UF tails the files (fishbucket tracks position).
+  # ---------------------------------------------------------------------------
+  sitea-syslog:
+    build: ./syslog
+    container_name: sitea-syslog
+    hostname: sitea-syslog
+    environment:
+      - SPLUNK_START_ARGS=--accept-license
+      - SPLUNK_PASSWORD=${SPLUNK_PASSWORD}
+    ports:
+      - "5514:514/udp"
+      - "5514:514/tcp"
+    volumes:
+      - sitea-syslog-spool:/var/spool/rsyslog
+      - sitea-syslog-logs:/var/log/network
+      - sitea-syslog-uf:/opt/splunkforwarder/var
+    networks:
+      - sitea-net
+    depends_on:
+      - sitea-hf
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    restart: unless-stopped
 # NETWORKS
 # Network segmentation models real-world topology:
 #   core-net   = Core DC internal (SH ↔ Core IDX)
@@ -215,3 +244,6 @@ volumes:
   siteb-idx-var:
   sitea-hf-etc:               # ← YENİ
   sitea-hf-var:               # ← YENİ
+  sitea-syslog-spool:
+  sitea-syslog-logs:
+  sitea-syslog-uf:
