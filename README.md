@@ -2,6 +2,14 @@
 
 ![CI](https://github.com/ozgunozcetin/unified-splunk-architecture/actions/workflows/ci.yml/badge.svg)
 
+## Architecture
+
+![Architecture](docs/architecture.png)
+
+The lab implements three logical sites with five Docker networks modelling
+trust boundaries. Source: [`docs/architecture.drawio`](docs/architecture.drawio)
+(open in https://app.diagrams.net).
+
 A Docker Compose lab that demonstrates the case study **"Unified Splunk
 Architecture for a Multi-Site, Sovereignty-Constrained Organization"**.
 
