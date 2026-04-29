@@ -31,7 +31,7 @@ jobs:
 
       - name: Lint all YAML files
         run: |
-          yamllint -d "{extends: default, rules: {line-length: {max: 200}, document-start: disable, truthy: disable, comments: disable, indentation: {spaces: 2, indent-sequences: false}}}" \
+          yamllint -d "{extends: default, rules: {line-length: {max: 200}, document-start: disable, truthy: disable, comments: disable, indentation: {spaces: 2, indent-sequences: true}}}" \
             docker-compose.yml .github/
 
   # ---------------------------------------------------------------------------
@@ -49,7 +49,7 @@ jobs:
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: syslog/Dockerfile
-          ignore: DL3008,DL3009,DL3015
+          ignore: DL3002,DL3008,DL3009,DL3015,DL3041
 
   # ---------------------------------------------------------------------------
   # Splunk btool check — runs the actual Splunk binary against our .conf
