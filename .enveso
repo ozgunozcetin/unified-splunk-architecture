@@ -1,0 +1,13 @@
+# =============================================================================
+# Unified Splunk Architecture — Environment Variables
+# =============================================================================
+# Copy this file to .env and customize.
+# .env is gitignored (NEVER commit secrets).
+#
+# Splunk password requirements (default policy):
+#   - Min 8 characters
+#   - At least 1 uppercase, 1 lowercase, 1 digit, 1 special char
+# =============================================================================
+
+SPLUNK_PASSWORD=Splunk-Lab-2026!
+SPLUNK_HEC_TOKEN=f26d8784-df45-4284-9d92-fd06dda06b8f

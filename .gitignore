@@ -1,0 +1,20 @@
+# Secrets — NEVER commit
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+logs/
+
+# Splunk runtime artifacts (if any leak out of containers)
+*.tgz
+*.spl
+splunk-*.tar.gz

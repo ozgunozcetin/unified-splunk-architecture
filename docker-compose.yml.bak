@@ -1,0 +1,220 @@
+# =============================================================================
+# Unified Splunk Architecture — Demo Lab
+# Case Study: Multi-site Splunk with Sovereignty, Buffering, Syslog, Governance
+# =============================================================================
+# Day 1 scope: Foundation — Core SH + Core IDX + Site B IDX, distributed search
+# Subsequent days add: Site A HF (buffering), Syslog tier, CI/CD pipeline
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # CORE DC — Search Head (also acts as Deployment Server / License Master)
+  # In production: this is a 3-member SHC. Single instance for lab.
+  # ---------------------------------------------------------------------------
+  core-shd:
+    image: splunk/splunk:9.4
+    container_name: core-shd
+    hostname: core-shd
+    environment:
+      - SPLUNK_START_ARGS=--accept-license
+      - SPLUNK_PASSWORD=${SPLUNK_PASSWORD}
+      - SPLUNK_ROLE=splunk_search_head
+      # Auto-configure distributed search peers (sovereignty + open-site indexers)
+      - SPLUNK_INDEXER_URL=core-idx,siteb-idx
+      - SPLUNK_HEC_TOKEN=${SPLUNK_HEC_TOKEN}
+    ports:
+      - "8000:8000"   # Splunk Web (SOC entry point)
+      - "8089:8089"   # Splunk Management
+    volumes:
+      - core-shd-etc:/opt/splunk/etc
+      - core-shd-var:/opt/splunk/var
+    networks:
+      - core-net
+      - wan-net
+    deploy:
+      resources:
+        limits:
+          memory: 1500M
+    healthcheck:
+      test: ["CMD", "/sbin/checkstate.sh"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 600s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # CORE DC — Indexer (receives data from open sites: A, C, E, F)
+  # In production: this is a multi-peer indexer cluster. Single peer for lab.
+  # ---------------------------------------------------------------------------
+  core-idx:
+    image: splunk/splunk:9.4
+    container_name: core-idx
+    hostname: core-idx
+    environment:
+      - SPLUNK_START_ARGS=--accept-license
+      - SPLUNK_PASSWORD=${SPLUNK_PASSWORD}
+      - SPLUNK_ROLE=splunk_indexer
+    ports:
+      - "8001:8000"   # Splunk Web (admin only)
+      - "8189:8089"   # Mgmt
+      - "9997:9997"   # S2S (forwarder ingest)
+    volumes:
+      - core-idx-etc:/opt/splunk/etc
+      - core-idx-var:/opt/splunk/var
+    networks:
+      - core-net
+    deploy:
+      resources:
+        limits:
+          memory: 1500M
+    healthcheck:
+      test: ["CMD", "/sbin/checkstate.sh"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 600s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # SITE B — Restricted Indexer (data sovereignty enforced)
+  # Data NEVER leaves this site. SH searches it via federated/distributed search;
+  # only RESULTS travel back, never raw events or buckets.
+  # ---------------------------------------------------------------------------
+  siteb-idx:
+    image: splunk/splunk:9.4
+    container_name: siteb-idx
+    hostname: siteb-idx
+    environment:
+      - SPLUNK_START_ARGS=--accept-license
+      - SPLUNK_PASSWORD=${SPLUNK_PASSWORD}
+      - SPLUNK_ROLE=splunk_indexer
+    ports:
+      - "8002:8000"   # Splunk Web (local site admin only)
+      - "8289:8089"   # Mgmt (reachable from SHD via wan-net)
+      - "9998:9997"   # S2S (only LOCAL Site B forwarders — host-mapped to 9998 to avoid conflict)
+    volumes:
+      - siteb-idx-etc:/opt/splunk/etc
+      - siteb-idx-var:/opt/splunk/var
+    networks:
+      - siteb-net    # Local-only (Site B internal forwarders connect here in Day 2)
+      - wan-net      # Reachable from SHD for distributed search ONLY (mgmt port)
+    deploy:
+      resources:
+        limits:
+          memory: 1500M
+    healthcheck:
+      test: ["CMD", "/sbin/checkstate.sh"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 600s
+    restart: unless-stopped
+
+# ---------------------------------------------------------------------------
+  # SITE A — Heavy Forwarder (intermediate aggregator)
+  # Open site forwarder pattern: local UF/HEC clients send to this HF,
+  # HF forwards to Core IDX over WAN with persistent queue + ACK.
+  # During WAN outage, HF queue absorbs the backlog (24h sizing target).
+  # ---------------------------------------------------------------------------
+  sitea-hf:
+    image: splunk/splunk:9.4
+    container_name: sitea-hf
+    hostname: sitea-hf
+    environment:
+      - SPLUNK_START_ARGS=--accept-license
+      - SPLUNK_PASSWORD=${SPLUNK_PASSWORD}
+      - SPLUNK_ROLE=splunk_heavy_forwarder
+      - SPLUNK_INDEXER_URL=core-idx
+    ports:
+      - "8003:8000"   # Splunk Web (admin/debug only)
+      - "8389:8089"   # Mgmt
+      - "9999:9997"   # S2S inbound (Site A UFs / loadgen connect here)
+      - "8088:8088"   # HEC (loadgen will use this)
+    volumes:
+      - sitea-hf-etc:/opt/splunk/etc
+      - sitea-hf-var:/opt/splunk/var
+    networks:
+      - sitea-net    # Local Site A LAN (loadgen + future UFs)
+      - wan-net      # Outbound to Core IDX (this is what we'll cut)
+    deploy:
+      resources:
+        limits:
+          memory: 1000M
+    healthcheck:
+      test: ["CMD", "/sbin/checkstate.sh"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 600s
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # SITE A — Log generator
+  # Continuously produces test events to demonstrate the
+  # "WAN outage → queue fills → reconnect → zero loss" scenario.
+  # Sends via HEC for reliable event ingestion.
+  # ---------------------------------------------------------------------------
+  sitea-loadgen:
+    image: alpine:3.19
+    container_name: sitea-loadgen
+    hostname: sitea-loadgen
+    command: >
+      sh -c "
+      apk add --no-cache curl >/dev/null 2>&1;
+      sleep 60;
+      i=0;
+      while true; do
+        i=$$((i + 1));
+        curl -sk -H \"Authorization: Splunk ${SPLUNK_HEC_TOKEN}\" \
+          https://sitea-hf:8088/services/collector/event \
+          -d \"{\\\"event\\\": \\\"LOADGEN seq=$$i host=app-01 site=A action=login user=u$$((i % 100))\\\", \\\"sourcetype\\\": \\\"loadgen_test\\\", \\\"index\\\": \\\"sitea_buffer\\\"}\" >/dev/null 2>&1 || true;
+        sleep 1;
+      done"
+    networks:
+      - sitea-net
+    depends_on:
+      - sitea-hf
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    restart: unless-stopped
+# -----------------------------------------------------------------------------
+# NETWORKS
+# Network segmentation models real-world topology:
+#   core-net   = Core DC internal (SH ↔ Core IDX)
+#   siteb-net  = Site B internal LAN (Site B IDX + future local UFs)
+#   wan-net    = Inter-site WAN (where distributed search traffic flows)
+#
+# CRITICAL FOR SOVEREIGNTY: Site B IDX is NOT on core-net.
+# Core IDX cannot directly reach Site B IDX → no bucket replication path possible.
+# SH on wan-net only talks to Site B IDX over mgmt port (8089) for search dispatch.
+# -----------------------------------------------------------------------------
+networks:
+  core-net:
+    driver: bridge
+    name: usa-core
+  siteb-net:
+    driver: bridge
+    name: usa-siteb
+  sitea-net:                  # ← YENİ
+    driver: bridge
+    name: usa-sitea
+  wan-net:
+    driver: bridge
+    name: usa-wan
+
+# -----------------------------------------------------------------------------
+# VOLUMES — persist data and config across container restarts
+# -----------------------------------------------------------------------------
+volumes:
+  core-shd-etc:
+  core-shd-var:
+  core-idx-etc:
+  core-idx-var:
+  siteb-idx-etc:
+  siteb-idx-var:
+  sitea-hf-etc:               # ← YENİ
+  sitea-hf-var:               # ← YENİ
