@@ -18,3 +18,12 @@ logs/
 *.tgz
 *.spl
 splunk-*.tar.gz
+
+# Extra protection — variants of .env
+.env*
+!.env.example
+
+# Backup files
+*.bak
+*.backup
+*~
