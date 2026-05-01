@@ -46,15 +46,6 @@ Architecture for a Multi-Site, Sovereignty-Constrained Organization"**.
 | http://localhost:8001 | Core Indexer — admin only | `admin` / see `.env` |
 | http://localhost:8002 | Site B Indexer — admin only | `admin` / see `.env` |
 
-**`verify.sh` says peers not registered**
-Splunk Ansible adds peers at startup. If the SH started before the IDXs
-were ready, peers may be missing. Restart the SH only:
-```bash
-docker compose restart core-shd
-```
-**Port conflicts (8000, 8089, 9997 already in use)**
-Edit the `ports:` section in `docker-compose.yml` to use different host
-ports (e.g. `9000:8000` instead of `8000:8000`).
 
 ## License & legal
 
