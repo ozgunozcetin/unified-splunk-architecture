@@ -15,7 +15,7 @@ Architecture for a Multi-Site, Sovereignty-Constrained Organization"**.
 
 ## What this lab proves
 
-| Case study requirement | How this lab demonstrates it |
+| Requirement | How this lab demonstrates it |
 |---|---|
 | **Single Pane of Glass** | One Search Head dispatches federated search across all sites simultaneously |
 | **Data Sovereignty (Sites B & D)** | Site B indexer is on an isolated Docker network — raw data never leaves; only search results return |
